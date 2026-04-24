@@ -108,7 +108,7 @@ model UserPlatform {
 }
 
 model Wallet {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   userId      Int
   address     String
   chain       String   @default("stellar")
@@ -118,6 +118,8 @@ model Wallet {
   deletedAt   DateTime?
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   payouts     Payout[]
+
+  @@index([userId])
 }
 
 model Payout {

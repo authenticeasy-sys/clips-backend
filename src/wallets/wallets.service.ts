@@ -3,8 +3,11 @@ import {
   NotFoundException,
   ForbiddenException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { StrKey } from '@stellar/stellar-sdk';
+import { ConnectWalletDto } from './dto/connect-wallet.dto';
 
 export interface DisconnectResult {
   message: string;
@@ -58,5 +61,36 @@ export class WalletsService {
       message: 'Wallet disconnected successfully',
       walletId,
     };
+  }
+
+  /**
+   * Connect or update a wallet.
+   * Validates the Stellar address and upserts the record.
+   */
+  async connect(userId: number, dto: ConnectWalletDto) {
+    if (!StrKey.isValidEd25519PublicKey(dto.address)) {
+      throw new BadRequestException('Invalid Stellar address');
+    }
+
+    return this.prisma.wallet.upsert({
+      where: {
+        address_chain: {
+          address: dto.address,
+          chain: dto.chain,
+        },
+      },
+      update: {
+        userId,
+        type: dto.type,
+        deletedAt: null, // Reactivate if it was soft-deleted
+        updatedAt: new Date(),
+      },
+      create: {
+        userId,
+        address: dto.address,
+        chain: dto.chain,
+        type: dto.type,
+      },
+    });
   }
 }

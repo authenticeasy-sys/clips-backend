@@ -120,6 +120,7 @@ model Wallet {
   payouts     Payout[]
 
   @@index([userId])
+  @@unique([address, chain])
 }
 
 model Payout {

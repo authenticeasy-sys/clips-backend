@@ -7,6 +7,7 @@ const mockPrisma = {
   wallet: {
     findUnique: jest.fn(),
     update: jest.fn(),
+    upsert: jest.fn(),
   },
   payout: {
     findFirst: jest.fn(),
@@ -74,5 +75,69 @@ describe('WalletsService.disconnect', () => {
       data: expect.objectContaining({ deletedAt: expect.any(Date) }),
     });
     expect(result).toEqual({ message: 'Wallet disconnected successfully', walletId: 1 });
+  });
+});
+
+describe('WalletsService.connect', () => {
+  let service: WalletsService;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        WalletsService,
+        { provide: PrismaService, useValue: mockPrisma },
+      ],
+    }).compile();
+    service = module.get<WalletsService>(WalletsService);
+  });
+
+  const validStellarAddress = 'GDH6VVE7RUCV664TYL5ZTP4YTL6H64XG76Z7Z7Z7Z7Z7Z7Z7Z7Z7Z7Z7';
+  // Note: Actually, G... addresses are 56 characters. 
+  const realStellarAddress = 'GDH6VVE7RUCV664TYL5ZTP4YTL6H64XG76Z7Z7Z7Z7Z7Z7Z7Z7Z7Z7Z7'; // This is 56 chars
+
+  it('throws BadRequestException for invalid Stellar address', async () => {
+    await expect(
+      service.connect(42, {
+        address: 'invalid-address',
+        chain: 'stellar',
+        type: 'freighter',
+      }),
+    ).rejects.toThrow('Invalid Stellar address');
+  });
+
+  it('upserts a wallet with valid Stellar address', async () => {
+    const dto = {
+      address: 'GDH6VVE7RUCV664TYL5ZTP4YTL6H64XG76Z7Z7Z7Z7Z7Z7Z7Z7Z7Z7Z7',
+      chain: 'stellar',
+      type: 'freighter',
+    };
+    mockPrisma.wallet.upsert.mockResolvedValue({
+      id: 1,
+      userId: 42,
+      ...dto,
+    });
+
+    const result = await service.connect(42, dto);
+
+    expect(mockPrisma.wallet.upsert).toHaveBeenCalledWith({
+      where: {
+        address_chain: {
+          address: dto.address,
+          chain: dto.chain,
+        },
+      },
+      update: expect.objectContaining({
+        userId: 42,
+        type: dto.type,
+      }),
+      create: {
+        userId: 42,
+        address: dto.address,
+        chain: dto.chain,
+        type: dto.type,
+      },
+    });
+    expect(result.id).toBe(1);
   });
 });

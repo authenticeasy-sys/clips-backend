@@ -19,6 +19,7 @@ import { CsrfModule } from './csrf/csrf.module';
 import { EncryptionModule } from './encryption/encryption.module';
 import { UserPlatformModule } from './user-platform/user-platform.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { CircuitBreakerModule } from './common/circuit-breaker/circuit-breaker.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module';
     SubscriptionsModule,
     NftModule,
     PayoutsModule,
+    CircuitBreakerModule,
   ],
   controllers: [AppController],
   providers: [

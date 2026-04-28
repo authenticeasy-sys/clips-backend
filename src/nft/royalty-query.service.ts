@@ -5,6 +5,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { StellarService } from '../stellar/stellar.service';
+import { RedisService } from '../redis/redis.service';
 import StellarSdk from '@stellar/stellar-sdk';
 import Redis from 'ioredis';
 import { CircuitBreakerService, CircuitBreakerConfig } from '../common/circuit-breaker/circuit-breaker.service';
@@ -51,27 +52,15 @@ export class RoyaltyQueryService {
   async getRoyaltyInfo(mintAddress: string): Promise<RoyaltyInfo> {
     const cacheKey = `royalty:${mintAddress}`;
 
-    try {
-      const cached = await this.redis.get(cacheKey);
-      if (cached) {
-        this.logger.debug(`Cache hit for royalty:${mintAddress}`);
-        return JSON.parse(cached) as RoyaltyInfo;
-      }
-    } catch (err) {
-      this.logger.warn(
-        `Redis read failed for ${cacheKey}: ${(err as Error).message}`,
-      );
+    const cached = await this.redisService.get(cacheKey);
+    if (cached) {
+      this.logger.debug(`Cache hit for royalty:${mintAddress}`);
+      return JSON.parse(cached) as RoyaltyInfo;
     }
 
     const result = await this.queryOnChainRoyalty(mintAddress);
 
-    try {
-      await this.redis.setex(cacheKey, CACHE_TTL_SECONDS, JSON.stringify(result));
-    } catch (err) {
-      this.logger.warn(
-        `Redis write failed for ${cacheKey}: ${(err as Error).message}`,
-      );
-    }
+    await this.redisService.setex(cacheKey, CACHE_TTL_SECONDS, JSON.stringify(result));
 
     return result;
   }

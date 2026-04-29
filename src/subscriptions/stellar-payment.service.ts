@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import Server, { TransactionBuilder, Networks, Operation, Asset } from '@stellar/stellar-sdk';
+import { Horizon, TransactionBuilder, Networks, Operation, Asset } from '@stellar/stellar-sdk';
 import { CreateStellarSubscriptionDto, StellarPaymentIntentDto } from './dto/create-stellar-subscription.dto';
 import { CircuitBreakerService, CircuitBreakerConfig } from '../common/circuit-breaker/circuit-breaker.service';
 
@@ -23,7 +23,7 @@ export class StellarPaymentService {
     private readonly configService: ConfigService,
     private readonly circuitBreakerService: CircuitBreakerService,
   ) {
-    this.server = new Server(
+    this.server = new Horizon.Server(
       this.configService.get<string>('STELLAR_HORIZON_URL') || 'https://horizon-testnet.stellar.org',
     );
   }

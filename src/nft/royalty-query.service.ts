@@ -7,6 +7,7 @@ import {
 import { StellarService } from '../stellar/stellar.service';
 import { RedisService } from '../redis/redis.service';
 import StellarSdk from '@stellar/stellar-sdk';
+import { CacheKeyBuilder } from './cache-key.util';
 import Redis from 'ioredis';
 import { CircuitBreakerService, CircuitBreakerConfig } from '../common/circuit-breaker/circuit-breaker.service';
 
@@ -50,7 +51,7 @@ export class RoyaltyQueryService {
    * Result is cached in Redis for 5 minutes.
    */
   async getRoyaltyInfo(mintAddress: string): Promise<RoyaltyInfo> {
-    const cacheKey = `royalty:${mintAddress}`;
+    const cacheKey = CacheKeyBuilder.royalty(mintAddress);
 
     const cached = await this.redisService.get(cacheKey);
     if (cached) {

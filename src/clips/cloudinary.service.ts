@@ -3,6 +3,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import * as streamifier from 'streamifier';
 import * as fs from 'fs';
 import { MetricsService } from '../metrics/metrics.service';
+import { CircuitBreakerService, CircuitBreakerConfig } from '../common/circuit-breaker/circuit-breaker.service';
 
 export interface CloudinaryUploadResult {
   secure_url: string;
@@ -16,6 +17,21 @@ export class CloudinaryService {
   private readonly logger = new Logger(CloudinaryService.name);
 
   constructor(private readonly metricsService: MetricsService) {
+  private readonly circuitBreakerConfig: CircuitBreakerConfig = {
+    name: 'cloudinary-upload',
+    failureThreshold: 5,
+    recoveryTimeout: 30000,
+    samplingDuration: 60000,
+  };
+
+  private readonly deleteCircuitBreakerConfig: CircuitBreakerConfig = {
+    name: 'cloudinary-delete',
+    failureThreshold: 5,
+    recoveryTimeout: 30000,
+    samplingDuration: 60000,
+  };
+
+  constructor(private readonly circuitBreakerService: CircuitBreakerService) {
     // Initialize Cloudinary with environment variables
     cloudinary.config({
       cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -40,7 +56,7 @@ export class CloudinaryService {
       resourceType?: 'video' | 'image' | 'raw' | 'auto';
       autoTagging?: number;
     } = {},
-    retries: number = 2,
+    _retries: number = 2,
   ): Promise<CloudinaryUploadResult> {
     const maxAttempts = retries + 1;
     let lastError: string = '';
@@ -87,8 +103,27 @@ export class CloudinaryService {
           await this.delay(delayMs);
           continue;
         }
+    try {
+      this.logger.log(`Starting Cloudinary upload for ${publicId}`);
+
+      const result = await this.circuitBreakerService.execute(
+        this.circuitBreakerConfig,
+        () => this.performUpload(buffer, publicId, options),
+      );
+
+      if (result.error) {
+        this.logger.error(`Cloudinary upload failed for ${publicId}: ${result.error}`);
+        // Throw to trigger circuit breaker failure counting
+        throw new Error(result.error);
       }
-    }
+
+      this.logger.log(`Clip uploaded successfully: ${publicId} (${result.secure_url})`);
+      return result;
+    } catch (error) {
+      // If it's already a ServiceUnavailableException from circuit breaker, re-throw
+      if (error.name === 'ServiceUnavailableException') {
+        throw error;
+      }
 
     // All attempts failed
     this.logger.error(
@@ -100,6 +135,16 @@ export class CloudinaryService {
       public_id: publicId,
       error: lastError || 'Upload failed after all retry attempts',
     };
+      // For other errors, return error result
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Cloudinary upload failed for ${publicId}: ${errorMessage}`);
+
+      return {
+        secure_url: '',
+        public_id: publicId,
+        error: errorMessage,
+      };
+    }
   }
 
   /**
@@ -200,9 +245,18 @@ export class CloudinaryService {
    */
   async deleteClip(publicId: string): Promise<void> {
     try {
-      await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
+      await this.circuitBreakerService.execute(
+        this.deleteCircuitBreakerConfig,
+        async () => {
+          await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
+          return { success: true };
+        },
+      );
       this.logger.log(`Clip deleted from Cloudinary: ${publicId}`);
     } catch (error) {
+      if (error.name === 'ServiceUnavailableException') {
+        throw error;
+      }
       this.logger.error(`Failed to delete clip ${publicId}: ${error.message}`);
     }
   }

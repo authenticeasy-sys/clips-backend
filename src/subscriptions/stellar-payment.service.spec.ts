@@ -18,6 +18,7 @@ jest.mock('@stellar/stellar-sdk', () => ({
   Networks: {},
   Operation: {},
   Asset: {},
+  Horizon: { Server: jest.fn() },
 }));
 
 describe('StellarPaymentService', () => {
@@ -83,6 +84,28 @@ describe('StellarPaymentService', () => {
       mockPrismaService.stellarPaymentIntent.create.mockResolvedValue(
         mockPaymentIntent,
       );
+      mockPrismaService.stellarPaymentIntent.create.mockResolvedValue(mockPaymentIntent);
+
+      const result = await service.createPaymentIntent(userId, dto);
+
+      expect(result).toEqual({
+        id: 'test-intent-id',
+        amount: 10,
+        asset: 'xlm',
+        destination: mockWallet.address,
+        memo: expect.stringMatching(/^CLIPS-/),
+        expiresAt: mockPaymentIntent.expiresAt,
+        status: 'pending',
+      });
+    });
+
+    it('should throw error if wallet not found', async () => {
+      const userId = 1;
+      const dto: CreateStellarSubscriptionDto = {
+        plan: 'pro',
+        asset: 'xlm',
+        amount: 10,
+      };
 
       const result = await service.createPaymentIntent(1, dto);
 
@@ -115,6 +138,15 @@ describe('StellarPaymentService', () => {
 
       expect(ok).toBe(true);
       expect(mockPrismaService.subscription.create).toHaveBeenCalled();
+      expect(mockPrismaService.stellarPaymentIntent.updateMany).toHaveBeenCalledWith({
+        where: {
+          status: 'pending',
+          expiresAt: { lt: expect.any(Date) },
+        },
+        data: {
+          status: 'expired',
+        },
+      });
     });
   });
 });

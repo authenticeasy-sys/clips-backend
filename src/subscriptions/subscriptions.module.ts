@@ -8,6 +8,10 @@ import { StellarModule } from '../stellar/stellar.module';
 
 @Module({
   imports: [PrismaModule, ConfigModule, StellarModule],
+import { CircuitBreakerModule } from '../common/circuit-breaker/circuit-breaker.module';
+
+@Module({
+  imports: [PrismaModule, ConfigModule, CircuitBreakerModule],
   controllers: [SubscriptionsController],
   providers: [StellarPaymentService, StellarWebhookService],
   exports: [StellarPaymentService, StellarWebhookService],

@@ -20,6 +20,8 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { RedisModule } from './redis/redis.module';
 import { EarningsModule } from './earnings/earnings.module';
 import { PayoutsModule } from './payouts/payouts.module';
+import { MetricsModule } from './metrics/metrics.module';
+import { WalletsModule } from './wallets/wallets.module';
 
 @Module({
   imports: [
@@ -70,6 +72,8 @@ import { PayoutsModule } from './payouts/payouts.module';
     PayoutsModule,
     RedisModule,
     EarningsModule,
+    MetricsModule,
+    WalletsModule,
   ],
   controllers: [AppController],
   providers: [

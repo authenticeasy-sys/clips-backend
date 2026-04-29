@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { StellarService } from '../stellar/stellar.service';
 import StellarSdk from '@stellar/stellar-sdk';
+import { MetricsService } from '../metrics/metrics.service';
 
 interface NftAttribute {
   trait_type: string;
@@ -50,6 +51,7 @@ export class NftMintService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly stellarService: StellarService,
+    private readonly metricsService: MetricsService,
   ) {}
 
   async uploadMetadataToIPFS(clipId: number): Promise<UploadMetadataResult> {
@@ -222,6 +224,7 @@ export class NftMintService {
         network: this.stellarService.network,
       };
     } catch (error) {
+      this.metricsService.incrementNftMints('failure');
       // Update status to failed on error
       await this.prisma.clip.update({
         where: { id: clipId },
@@ -368,6 +371,7 @@ export class NftMintService {
           mintedAt: new Date(),
         },
       });
+      this.metricsService.incrementNftMints('success');
 
       return {
         success: true,
@@ -378,6 +382,7 @@ export class NftMintService {
         },
       };
     } catch (error) {
+      this.metricsService.incrementNftMints('failure');
       const message = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to confirm mint for clip ${clipId}: ${message}`);
       throw new BadRequestException(`Failed to confirm mint: ${message}`);

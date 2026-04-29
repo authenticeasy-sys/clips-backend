@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { v2 as cloudinary } from 'cloudinary';
 import * as streamifier from 'streamifier';
 import * as fs from 'fs';
+import { MetricsService } from '../metrics/metrics.service';
 
 export interface CloudinaryUploadResult {
   secure_url: string;
@@ -14,7 +15,7 @@ export interface CloudinaryUploadResult {
 export class CloudinaryService {
   private readonly logger = new Logger(CloudinaryService.name);
 
-  constructor() {
+  constructor(private readonly metricsService: MetricsService) {
     // Initialize Cloudinary with environment variables
     cloudinary.config({
       cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -57,6 +58,7 @@ export class CloudinaryService {
           this.logger.warn(
             `Cloudinary upload attempt ${attempt}/${maxAttempts} failed for ${publicId}: ${result.error}`,
           );
+          this.metricsService.incrementCloudinaryUploadErrors();
 
           if (attempt < maxAttempts) {
             // Wait before retry with exponential backoff
@@ -77,6 +79,7 @@ export class CloudinaryService {
         this.logger.error(
           `Cloudinary upload attempt ${attempt}/${maxAttempts} threw error for ${publicId}: ${lastError}`,
         );
+        this.metricsService.incrementCloudinaryUploadErrors();
 
         if (attempt < maxAttempts) {
           const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
@@ -91,6 +94,7 @@ export class CloudinaryService {
     this.logger.error(
       `All ${maxAttempts} Cloudinary upload attempts failed for ${publicId}. Last error: ${lastError}`,
     );
+    this.metricsService.incrementCloudinaryUploadErrors();
     return {
       secure_url: '',
       public_id: publicId,

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { StrKey, Horizon } from '@stellar/stellar-sdk';
+import { MetricsService } from '../metrics/metrics.service';
 
 export type StellarNetwork = 'testnet' | 'public';
 
@@ -12,7 +13,7 @@ export class StellarService {
   readonly horizonUrl: string;
   readonly networkPassphrase: string;
 
-  constructor() {
+  constructor(private readonly metricsService: MetricsService) {
     const raw = (process.env.STELLAR_NETWORK ?? 'testnet').toLowerCase();
     this.network = raw === 'public' ? 'public' : 'testnet';
 
@@ -54,6 +55,7 @@ export class StellarService {
 
     if (!response.ok) {
       const body = await response.text();
+      this.metricsService.incrementStellarRpcErrors();
       throw new Error(
         `Horizon lookup failed (${response.status}): ${body.slice(0, 300)}`,
       );
@@ -82,6 +84,7 @@ export class StellarService {
       );
       return nativeBalance ? parseFloat(nativeBalance.balance) : 0;
     } catch (error) {
+      this.metricsService.incrementStellarRpcErrors();
       this.logger.error(
         `Failed to fetch balance for ${address}: ${error.message}`,
       );

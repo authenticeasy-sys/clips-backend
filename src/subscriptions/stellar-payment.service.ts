@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import Server, { TransactionBuilder, Networks, Operation, Asset } from '@stellar/stellar-sdk';
 import { CreateStellarSubscriptionDto, StellarPaymentIntentDto } from './dto/create-stellar-subscription.dto';
+import { StellarService } from '../stellar/stellar.service';
 
 @Injectable()
 export class StellarPaymentService {
@@ -12,6 +13,7 @@ export class StellarPaymentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly stellarService: StellarService,
   ) {
     this.server = new Server(
       this.configService.get<string>('STELLAR_HORIZON_URL') || 'https://horizon-testnet.stellar.org',
@@ -38,12 +40,18 @@ export class StellarPaymentService {
     const memo = dto.memo || this.generatePaymentMemo(userId);
     
     // Create payment intent record
+    const destination = dto.destinationAddress ?? wallet.address;
+    const addressCheck = this.stellarService.validateAddress(destination);
+    if (!addressCheck.valid) {
+      throw new BadRequestException('Invalid Stellar address format');
+    }
+
     const paymentIntent = await this.prisma.stellarPaymentIntent.create({
       data: {
         userId,
         amount: dto.amount,
         asset: dto.asset,
-        destination: wallet.address,
+        destination,
         memo,
         status: 'pending',
         expiresAt: new Date(Date.now() + this.PAYMENT_EXPIRY_MINUTES * 60 * 1000),
@@ -55,7 +63,7 @@ export class StellarPaymentService {
       id: paymentIntent.id,
       amount: dto.amount,
       asset: dto.asset,
-      destination: wallet.address,
+      destination,
       memo,
       expiresAt: paymentIntent.expiresAt,
       status: 'pending',
@@ -199,5 +207,56 @@ export class StellarPaymentService {
         status: 'expired',
       },
     });
+  }
+
+  async processDetectedPayment(params: {
+    memo: string;
+    amount: number;
+    transactionId: string;
+  }): Promise<boolean> {
+    const duplicate = await this.prisma.stellarPaymentIntent.findFirst({
+      where: {
+        transactionId: params.transactionId,
+        status: 'completed',
+      },
+    });
+
+    if (duplicate) {
+      return true;
+    }
+
+    const paymentIntent = await this.prisma.stellarPaymentIntent.findFirst({
+      where: {
+        memo: params.memo,
+        status: 'pending',
+      },
+    });
+
+    if (!paymentIntent) {
+      return false;
+    }
+
+    if (paymentIntent.expiresAt.getTime() <= Date.now()) {
+      await this.prisma.stellarPaymentIntent.update({
+        where: { id: paymentIntent.id },
+        data: { status: 'expired' },
+      });
+      return false;
+    }
+
+    if (paymentIntent.amount !== params.amount) {
+      return false;
+    }
+
+    await this.prisma.stellarPaymentIntent.update({
+      where: { id: paymentIntent.id },
+      data: {
+        status: 'completed',
+        transactionId: params.transactionId,
+      },
+    });
+
+    await this.activateSubscription(paymentIntent.userId, paymentIntent.plan);
+    return true;
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface EarningsBreakdown {
@@ -32,7 +32,7 @@ export class EarningsService {
     limit = 20,
   ): Promise<EarningsDashboard> {
     const earnings = await this.prisma.earning.findMany({
-      where: { clip: { video: { userId } } },
+      where: { clip: { video: { userId } }, deletedAt: null },
       select: { amount: true, source: true, date: true },
     });
 
@@ -89,5 +89,29 @@ export class EarningsService {
       },
       history: paginatedHistory,
     };
+  }
+
+  async softDelete(earningId: number, userId: number): Promise<{ message: string }> {
+    const earning = await this.prisma.earning.findUnique({
+      where: { id: earningId },
+      include: { clip: { include: { video: { select: { userId: true } } } } },
+    });
+
+    if (!earning || earning.clip.video.userId !== userId) {
+      throw new NotFoundException(`Earning ${earningId} not found`);
+    }
+
+    if (earning.deletedAt !== null) {
+      throw new NotFoundException(`Earning ${earningId} not found`);
+    }
+
+    await this.prisma.earning.update({
+      where: { id: earningId },
+      data: { deletedAt: new Date() },
+    });
+
+    this.logger.log(`Soft-deleted earning ${earningId} for user ${userId}`);
+
+    return { message: 'Earning deleted successfully' };
   }
 }

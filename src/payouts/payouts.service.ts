@@ -54,7 +54,7 @@ export class PayoutsService {
 
     // Calculate user's pending balance from earnings
     const totalEarnings = await this.prisma.earning.aggregate({
-      where: { clip: { video: { userId } } },
+      where: { clip: { video: { userId } }, deletedAt: null },
       _sum: { amount: true },
     });
 

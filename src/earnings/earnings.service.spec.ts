@@ -9,6 +9,8 @@ describe('EarningsService', () => {
   const mockPrismaService = {
     earning: {
       findMany: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
     },
     payout: {
       findMany: jest.fn(),
@@ -95,6 +97,70 @@ describe('EarningsService', () => {
       const result = await service.getEarningsDashboard(1, 2, 10);
 
       expect(result.history).toEqual([]);
+    });
+
+    it('should pass deletedAt: null filter in earnings query', async () => {
+      mockPrismaService.earning.findMany.mockResolvedValue([]);
+      mockPrismaService.payout.findMany.mockResolvedValue([]);
+
+      await service.getEarningsDashboard(1);
+
+      expect(mockPrismaService.earning.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ deletedAt: null }),
+        }),
+      );
+    });
+  });
+
+  describe('softDelete', () => {
+    it('should soft-delete an earning owned by the user', async () => {
+      mockPrismaService.earning.findUnique.mockResolvedValue({
+        id: 1,
+        deletedAt: null,
+        clip: { video: { userId: 1 } },
+      });
+      mockPrismaService.earning.update.mockResolvedValue({});
+
+      const result = await service.softDelete(1, 1);
+
+      expect(result).toEqual({ message: 'Earning deleted successfully' });
+      expect(mockPrismaService.earning.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { deletedAt: expect.any(Date) },
+      });
+    });
+
+    it('should throw NotFoundException if earning does not exist', async () => {
+      mockPrismaService.earning.findUnique.mockResolvedValue(null);
+
+      await expect(service.softDelete(999, 1)).rejects.toThrow(
+        'Earning 999 not found',
+      );
+    });
+
+    it('should throw NotFoundException if earning belongs to another user', async () => {
+      mockPrismaService.earning.findUnique.mockResolvedValue({
+        id: 1,
+        deletedAt: null,
+        clip: { video: { userId: 2 } },
+      });
+
+      await expect(service.softDelete(1, 1)).rejects.toThrow(
+        'Earning 1 not found',
+      );
+    });
+
+    it('should throw NotFoundException if earning is already soft-deleted', async () => {
+      mockPrismaService.earning.findUnique.mockResolvedValue({
+        id: 1,
+        deletedAt: new Date(),
+        clip: { video: { userId: 1 } },
+      });
+
+      await expect(service.softDelete(1, 1)).rejects.toThrow(
+        'Earning 1 not found',
+      );
     });
   });
 });

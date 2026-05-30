@@ -2,7 +2,9 @@ import {
   Controller,
   UseGuards,
   Get,
+  Delete,
   Query,
+  Param,
   Req,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -31,6 +33,17 @@ export class EarningsController {
       req.user.userId,
       pageNum,
       limitNum,
+    );
+  }
+
+  @Delete(':id')
+  async deleteEarning(
+    @Req() req: RequestWithUser,
+    @Param('id') id: string,
+  ) {
+    return this.earningsService.softDelete(
+      parseInt(id, 10),
+      req.user.userId,
     );
   }
 }

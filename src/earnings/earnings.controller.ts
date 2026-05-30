@@ -6,6 +6,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Public } from '../auth/decorators/public.decorator';
 import { EarningsService } from './earnings.service';
 import { Request } from 'express';
 
@@ -32,5 +33,12 @@ export class EarningsController {
       pageNum,
       limitNum,
     );
+  }
+
+  @Public()
+  @Get('leaderboard')
+  async getLeaderboard(@Query('limit') limit = '10') {
+    const limitNum = Math.min(parseInt(limit, 10) || 10, 100);
+    return this.earningsService.getLeaderboard(limitNum);
   }
 }
